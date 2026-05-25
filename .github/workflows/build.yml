@@ -11,24 +11,17 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Install Tizen CLI
+      - name: Install zip
+        run: sudo apt-get install -y zip
+
+      - name: Build WGT
         run: |
-          sudo apt-get update
-          sudo apt-get install -y zip
+          zip -j StreamFlow.wgt index.html config.xml
 
-      - name: Create WGT package
-        run: |
-          mkdir -p wgt-build
-          cp index.html wgt-build/
-          cp config.xml wgt-build/
-          cd wgt-build
-          zip -r ../StreamFlow.wgt .
-          cd ..
-
-      - name: Upload WGT as artifact
-        uses: actions/upload-artifact@v3
+      - name: Upload WGT artifact
+        uses: actions/upload-artifact@v4
         with:
           name: StreamFlow-WGT
           path: StreamFlow.wgt
