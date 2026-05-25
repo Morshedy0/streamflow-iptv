@@ -1,0 +1,34 @@
+name: Build Tizen WGT
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Tizen CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip
+
+      - name: Create WGT package
+        run: |
+          mkdir -p wgt-build
+          cp index.html wgt-build/
+          cp config.xml wgt-build/
+          cd wgt-build
+          zip -r ../StreamFlow.wgt .
+          cd ..
+
+      - name: Upload WGT as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: StreamFlow-WGT
+          path: StreamFlow.wgt
