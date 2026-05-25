@@ -6,7 +6,7 @@
 
   <tizen:application id="StreamFlowIPTV.app"
                      package="StreamFlowI"
-                     required_version="4.0" />
+                     required_version="3.0" />
 
   <content src="index.html" />
 
