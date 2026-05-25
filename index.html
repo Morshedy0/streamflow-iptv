@@ -1,0 +1,1334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StreamFlow IPTV</title>
+  <!-- Tizen WebAPIs bridge — required for webapis.avplay on Tizen 7.0+ / 9.0 -->
+  <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+    :root {
+      --bg:        #080c10;
+      --surface:   #0f1520;
+      --card:      #141c2a;
+      --border:    #1e2d42;
+      --accent:    #00d4ff;
+      --accent2:   #ff3d6e;
+      --text:      #e8f0fe;
+      --muted:     #5a7080;
+      --focus-glow: 0 0 0 2px var(--accent), 0 0 20px rgba(0,212,255,0.3);
+    }
+
+    * { margin:0; padding:0; box-sizing:border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      width: 1920px; height: 1080px;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* ─── SCAN-LINE OVERLAY ─── */
+    body::after {
+      content:'';
+      position:fixed; inset:0;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+      pointer-events:none; z-index:9999;
+    }
+
+    /* ═══════════════ LOGIN SCREEN ═══════════════ */
+    #loginScreen {
+      display:flex; align-items:center; justify-content:center;
+      width:100%; height:100%; position:absolute; inset:0;
+      background:
+        radial-gradient(ellipse 80% 60% at 20% 50%, rgba(0,212,255,0.06) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 80% at 80% 30%, rgba(255,61,110,0.05) 0%, transparent 60%),
+        var(--bg);
+    }
+
+    .login-box {
+      width: 560px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 56px 52px 48px;
+      box-shadow: 0 40px 80px rgba(0,0,0,0.6);
+      position: relative;
+    }
+
+    .login-box::before {
+      content:'';
+      position:absolute; top:0; left:50%; transform:translateX(-50%);
+      width:200px; height:2px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      border-radius:2px;
+    }
+
+    .brand {
+      text-align:center;
+      margin-bottom: 40px;
+    }
+
+    .brand-logo {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 52px;
+      letter-spacing: 4px;
+      background: linear-gradient(135deg, var(--accent), #0099cc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1;
+    }
+
+    .brand-sub {
+      font-size: 11px;
+      letter-spacing: 6px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    .field {
+      margin-bottom: 18px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .field input {
+      width: 100%;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 16px;
+      padding: 14px 18px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      -webkit-appearance: none;
+    }
+
+    .field input:focus,
+    .field input.focused {
+      border-color: var(--accent);
+      box-shadow: var(--focus-glow);
+    }
+
+    .field input::placeholder { color: var(--muted); }
+
+    .btn-login {
+      width: 100%;
+      margin-top: 28px;
+      background: linear-gradient(135deg, var(--accent), #0099cc);
+      border: none;
+      border-radius: 8px;
+      color: #000;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22px;
+      letter-spacing: 3px;
+      padding: 16px;
+      cursor: pointer;
+      outline: none;
+      transition: opacity 0.2s, box-shadow 0.2s, transform 0.1s;
+    }
+
+    .btn-login:focus,
+    .btn-login.focused {
+      box-shadow: var(--focus-glow);
+      opacity: 0.9;
+    }
+
+    .btn-login:active { transform: scale(0.98); }
+
+    .error-msg {
+      margin-top: 16px;
+      background: rgba(255,61,110,0.12);
+      border: 1px solid rgba(255,61,110,0.3);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: var(--accent2);
+      text-align: center;
+      display: none;
+    }
+
+    .loading-dots {
+      display: none;
+      text-align: center;
+      margin-top: 20px;
+      color: var(--accent);
+      font-size: 13px;
+      letter-spacing: 2px;
+    }
+
+    .loading-dots span {
+      display: inline-block;
+      animation: dot 1.4s infinite;
+    }
+    .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes dot {
+      0%,80%,100% { opacity: 0.2; transform: scale(0.8); }
+      40%          { opacity: 1;   transform: scale(1.1); }
+    }
+
+    /* ═══════════════ MAIN APP ═══════════════ */
+    #appScreen {
+      display: none;
+      width: 100%; height: 100%;
+      position: absolute; inset: 0;
+      flex-direction: column;
+    }
+
+    /* TOP BAR */
+    .topbar {
+      display: flex;
+      align-items: center;
+      padding: 0 40px;
+      height: 72px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      gap: 32px;
+      flex-shrink: 0;
+    }
+
+    .topbar-brand {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 28px;
+      letter-spacing: 3px;
+      color: var(--accent);
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 4px;
+      flex: 1;
+    }
+
+    .nav-tab {
+      padding: 8px 24px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.2s;
+      letter-spacing: 0.5px;
+    }
+
+    .nav-tab.active { color: var(--text); background: var(--card); border-color: var(--border); }
+    .nav-tab.focused { color: var(--accent); border-color: var(--accent); box-shadow: var(--focus-glow); }
+
+    .topbar-info {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .status-dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #00e676;
+      margin-right: 8px;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%,100% { opacity:1; } 50% { opacity:0.4; }
+    }
+
+    /* CONTENT AREA */
+    .content-area {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* SIDEBAR */
+    .sidebar {
+      width: 280px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .sidebar-header {
+      padding: 20px 24px 14px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .category-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+
+    .category-list::-webkit-scrollbar { width: 3px; }
+    .category-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .cat-item {
+      padding: 12px 24px;
+      font-size: 14px;
+      color: var(--muted);
+      cursor: pointer;
+      border-left: 3px solid transparent;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .cat-item:hover,
+    .cat-item.focused {
+      color: var(--text);
+      background: var(--card);
+      border-left-color: var(--accent);
+    }
+
+    .cat-item.active {
+      color: var(--accent);
+      background: rgba(0,212,255,0.06);
+      border-left-color: var(--accent);
+    }
+
+    .cat-count {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--muted);
+      background: var(--card);
+      padding: 2px 8px;
+      border-radius: 12px;
+    }
+
+    /* CHANNEL LIST */
+    .channel-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .channel-search {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .channel-search input {
+      width: 100%;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      padding: 10px 16px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .channel-search input:focus,
+    .channel-search input.focused {
+      border-color: var(--accent);
+      box-shadow: var(--focus-glow);
+    }
+
+    .channel-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+
+    .channel-list::-webkit-scrollbar { width: 3px; }
+    .channel-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .channel-item {
+      display: flex;
+      align-items: center;
+      padding: 10px 20px;
+      gap: 14px;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+      transition: all 0.15s;
+    }
+
+    .channel-item:hover,
+    .channel-item.focused {
+      background: var(--card);
+      border-left-color: var(--accent);
+    }
+
+    .channel-item.playing {
+      background: rgba(0,212,255,0.08);
+      border-left-color: var(--accent);
+    }
+
+    .ch-num {
+      font-size: 11px;
+      color: var(--muted);
+      width: 28px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .ch-logo {
+      width: 36px; height: 36px;
+      border-radius: 6px;
+      object-fit: contain;
+      background: var(--card);
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .ch-logo-placeholder {
+      width: 36px; height: 36px;
+      border-radius: 6px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .ch-info { flex: 1; overflow: hidden; }
+
+    .ch-name {
+      font-size: 14px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .ch-epg {
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 2px;
+    }
+
+    .ch-now {
+      font-size: 10px;
+      color: var(--accent);
+      background: rgba(0,212,255,0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+
+    /* PLAYER PANEL */
+    #playerScreen {
+      display: none;
+      position: absolute;
+      inset: 0;
+      background: #000;
+      z-index: 100;
+    }
+
+    #avplayContainer {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    /* AVPlay renders behind the overlay via webapis.avplay.setDisplayRect */
+    #avplayCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #000;
+    }
+
+    .player-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, transparent 40%, transparent 70%, rgba(0,0,0,0.6) 100%);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 40px;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+
+    .player-overlay.visible { opacity: 1; pointer-events: all; }
+
+    .player-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .player-channel-name {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 42px;
+      letter-spacing: 2px;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+    }
+
+    .player-back-btn {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      outline: none;
+      backdrop-filter: blur(10px);
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+
+    .player-back-btn.focused,
+    .player-back-btn:focus {
+      box-shadow: var(--focus-glow);
+      background: rgba(0,212,255,0.15);
+    }
+
+    .player-bottom {}
+
+    .player-epg {
+      font-size: 16px;
+      color: rgba(255,255,255,0.7);
+      margin-bottom: 16px;
+    }
+
+    .player-controls {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .ctrl-btn {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.15);
+      color: var(--text);
+      font-size: 13px;
+      padding: 8px 18px;
+      border-radius: 6px;
+      cursor: pointer;
+      outline: none;
+      backdrop-filter: blur(10px);
+      transition: all 0.2s;
+    }
+
+    .ctrl-btn.focused,
+    .ctrl-btn:focus {
+      background: rgba(0,212,255,0.2);
+      border-color: var(--accent);
+      box-shadow: var(--focus-glow);
+    }
+
+    .player-status {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: rgba(255,255,255,0.5);
+    }
+
+    /* BUFFERING SPINNER */
+    .spinner {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      display: none;
+    }
+
+    .spinner-ring {
+      width: 60px; height: 60px;
+      border: 3px solid rgba(255,255,255,0.1);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* TOAST */
+    .toast {
+      position: fixed;
+      bottom: 60px; left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 14px;
+      padding: 12px 28px;
+      border-radius: 8px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      opacity: 0;
+      transition: all 0.3s;
+      z-index: 9998;
+      pointer-events: none;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* EMPTY STATE */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--muted);
+      gap: 12px;
+    }
+
+    .empty-icon { font-size: 48px; }
+    .empty-text { font-size: 15px; }
+
+    /* FADE IN */
+    .fade-in {
+      animation: fadeIn 0.4s ease forwards;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════ LOGIN SCREEN ══════════════ -->
+<div id="loginScreen">
+  <div class="login-box fade-in">
+    <div class="brand">
+      <div class="brand-logo">StreamFlow</div>
+      <div class="brand-sub">IPTV Client</div>
+    </div>
+
+    <div class="field">
+      <label>Server URL</label>
+      <input type="text" id="serverUrl" placeholder="http://your-server.com:port"
+             autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+    </div>
+
+    <div class="field">
+      <label>Username</label>
+      <input type="text" id="username" placeholder="your_username"
+             autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+    </div>
+
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="password" placeholder="••••••••"
+             autocomplete="off" />
+    </div>
+
+    <button class="btn-login" id="loginBtn">CONNECT</button>
+
+    <div class="error-msg" id="errorMsg"></div>
+    <div class="loading-dots" id="loadingDots">
+      CONNECTING<span>.</span><span>.</span><span>.</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ MAIN APP ══════════════ -->
+<div id="appScreen">
+  <div class="topbar">
+    <div class="topbar-brand">StreamFlow</div>
+    <div class="nav-tabs">
+      <div class="nav-tab active" data-tab="live" id="tabLive">📺 Live TV</div>
+      <div class="nav-tab" data-tab="vod"  id="tabVod">🎬 Movies</div>
+      <div class="nav-tab" data-tab="series" id="tabSeries">📦 Series</div>
+    </div>
+    <div class="topbar-info">
+      <span class="status-dot"></span>
+      <span id="userInfo">Connected</span>
+    </div>
+  </div>
+
+  <div class="content-area">
+    <!-- Categories sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-header">Categories</div>
+      <div class="category-list" id="categoryList">
+        <div class="empty-state"><div class="empty-icon">📂</div></div>
+      </div>
+    </div>
+
+    <!-- Channel list -->
+    <div class="channel-panel">
+      <div class="channel-search">
+        <input type="text" id="searchInput" placeholder="🔍  Search channels..." autocomplete="off" />
+      </div>
+      <div class="channel-list" id="channelList">
+        <div class="empty-state">
+          <div class="empty-icon">📡</div>
+          <div class="empty-text">Select a category</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ PLAYER SCREEN ══════════════ -->
+<div id="playerScreen">
+  <div id="avplayContainer">
+    <!-- AVPlay renders natively via webapis.avplay.setDisplayRect on Tizen 7.0+ / 9.0 -->
+    <div id="avplayCanvas"></div>
+  </div>
+
+  <div class="spinner" id="spinner">
+    <div class="spinner-ring"></div>
+  </div>
+
+  <div class="player-overlay" id="playerOverlay">
+    <div class="player-top">
+      <div class="player-channel-name" id="playerChName">Channel Name</div>
+      <button class="ctrl-btn player-back-btn" id="playerBackBtn">← Back</button>
+    </div>
+    <div class="player-bottom">
+      <div class="player-epg" id="playerEpg"></div>
+      <div class="player-controls">
+        <button class="ctrl-btn" id="btnMute">🔇 Mute</button>
+        <button class="ctrl-btn" id="btnPrev">⏮ Prev</button>
+        <button class="ctrl-btn" id="btnNext">⏭ Next</button>
+        <div class="player-status" id="playerStatus">LIVE</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast notification -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+//  StreamFlow IPTV — Full Tizen / Xtream Codes Client
+// ════════════════════════════════════════════════════════════
+
+'use strict';
+
+// ── State ──────────────────────────────────────────────────
+const State = {
+  server: '', user: '', pass: '',
+  token: null, info: null,
+  activeTab: 'live',
+  categories: { live:[], vod:[], series:[] },
+  streams:    { live:[], vod:[], series:[] },
+  activeCat:  null,
+  filteredStreams: [],
+  playingIndex: -1,
+  overlayTimer: null,
+  muted: false,
+  avplay: null,
+
+  // D-pad focus zones: 'login', 'nav', 'cats', 'channels', 'player'
+  focusZone: 'login',
+  focusIdx:  { login:0, nav:0, cats:0, channels:0, player:0 },
+};
+
+// ── Xtream Codes API ───────────────────────────────────────
+const XC = {
+  base() { return `${State.server}/player_api.php?username=${State.user}&password=${State.pass}`; },
+
+  async call(action, extra='') {
+    const url = `${this.base()}&action=${action}${extra}`;
+    const r = await fetch(url, { signal: AbortSignal.timeout(12000) });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  },
+
+  async login()            { return this.call(''); }, // returns user_info + server_info
+  async getLiveCategories(){ return this.call('get_live_categories'); },
+  async getVodCategories() { return this.call('get_vod_categories'); },
+  async getSeriesCategories(){ return this.call('get_series_categories'); },
+  async getLiveStreams(catId){ return this.call('get_live_streams', catId ? `&category_id=${catId}` : ''); },
+  async getVodStreams(catId) { return this.call('get_vod_streams',  catId ? `&category_id=${catId}` : ''); },
+  async getSeries(catId)    { return this.call('get_series',        catId ? `&category_id=${catId}` : ''); },
+
+  streamUrl(type, id, ext) {
+    if (type === 'live') return `${State.server}/live/${State.user}/${State.pass}/${id}.${ext || 'm3u8'}`;
+    if (type === 'vod')  return `${State.server}/movie/${State.user}/${State.pass}/${id}.${ext || 'mp4'}`;
+    return `${State.server}/series/${State.user}/${State.pass}/${id}.${ext || 'mp4'}`;
+  },
+};
+
+// ── AVPlay helper (Tizen 7.0+ / 9.0 — webapis.avplay) ─────
+//
+//  Samsung dropped the <object type="application/avplayer"> approach
+//  starting with Tizen 7.0. The correct modern API is webapis.avplay,
+//  loaded via the $WEBAPIS/webapis/webapis.js bridge script in <head>.
+//  setDisplayRect positions the native video layer behind the HTML overlay.
+//
+const Player = {
+  // Returns true if the Tizen AVPlay API is available on this device.
+  _hasAVPlay() {
+    return typeof webapis !== 'undefined' &&
+           webapis.avplay !== undefined &&
+           typeof webapis.avplay.open === 'function';
+  },
+
+  init() {
+    if (this._hasAVPlay()) {
+      console.log('[Player] webapis.avplay available — Tizen 7.0+ mode');
+      return true;
+    }
+    console.warn('[Player] webapis.avplay not found — will use HTML5 fallback');
+    return false;
+  },
+
+  play(url) {
+    if (!this._hasAVPlay()) {
+      this._fallback(url);
+      return;
+    }
+
+    try {
+      // Always stop/close any previous session before opening a new one
+      this._safeStop();
+
+      webapis.avplay.open(url);
+
+      // Position the native video surface to fill the 1920×1080 screen.
+      // The HTML overlay sits on top via z-index; AVPlay renders underneath.
+      webapis.avplay.setDisplayRect(0, 0, 1920, 1080);
+      webapis.avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_FULL_SCREEN');
+
+      // Listener for buffering and error events
+      webapis.avplay.setListener({
+        onbufferingstart: function() {
+          $('#spinner').style.display = 'flex';
+        },
+        onbufferingcomplete: function() {
+          $('#spinner').style.display = 'none';
+        },
+        oncurrentplaytime: function(t) {
+          // Could display a live clock here if needed
+        },
+        onevent: function(eventType, eventData) {
+          console.log('[AVPlay] event:', eventType, eventData);
+        },
+        onerror: function(errorMsg) {
+          console.error('[AVPlay] onerror:', errorMsg);
+          $('#spinner').style.display = 'none';
+          showToast('Stream error — trying fallback…');
+          Player._fallback(url);
+        },
+        ondrmevent: function(drmType, drmData) {
+          console.log('[AVPlay] DRM event:', drmType);
+        },
+      });
+
+      webapis.avplay.prepareAsync(
+        function onSuccess() {
+          webapis.avplay.play();
+          $('#spinner').style.display = 'none';
+        },
+        function onError(err) {
+          console.error('[AVPlay] prepareAsync error:', err);
+          showToast('Prepare failed — trying fallback…');
+          Player._fallback(url);
+        }
+      );
+
+    } catch(e) {
+      console.error('[AVPlay] play() exception:', e);
+      this._fallback(url);
+    }
+  },
+
+  // Gracefully stop and close the current AVPlay session
+  _safeStop() {
+    try {
+      const state = webapis.avplay.getState();
+      // Valid states: NONE | IDLE | READY | PLAYING | PAUSED
+      if (state === 'PLAYING' || state === 'PAUSED') {
+        webapis.avplay.stop();
+      }
+      if (state !== 'NONE') {
+        webapis.avplay.close();
+      }
+    } catch(e) {
+      // Ignore — state may already be NONE
+    }
+  },
+
+  // HTML5 <video> fallback for environments where AVPlay is unavailable
+  // (e.g. running in a browser for testing, or rare edge cases on old firmware)
+  _fallback(url) {
+    console.warn('[Player] Using HTML5 video fallback for:', url);
+    let vid = document.getElementById('fallbackVideo');
+    if (!vid) {
+      vid = document.createElement('video');
+      vid.id = 'fallbackVideo';
+      vid.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;background:#000;z-index:1;';
+      vid.autoplay = true;
+      vid.controls = false;
+      $('#avplayContainer').appendChild(vid);
+    }
+    vid.style.display = 'block';
+    vid.src = url;
+    vid.load();
+    vid.play().catch(err => {
+      console.error('[Player] HTML5 play() failed:', err);
+      showToast('Playback failed: ' + err.message);
+    });
+    $('#spinner').style.display = 'none';
+  },
+
+  stop() {
+    // Stop AVPlay
+    if (this._hasAVPlay()) {
+      this._safeStop();
+    }
+    // Stop HTML5 fallback if active
+    const vid = document.getElementById('fallbackVideo');
+    if (vid) {
+      vid.pause();
+      vid.removeAttribute('src');
+      vid.load();
+      vid.style.display = 'none';
+    }
+  },
+
+  toggleMute() {
+    State.muted = !State.muted;
+    try {
+      if (this._hasAVPlay()) {
+        webapis.avplay.setMute(State.muted);
+      }
+      const vid = document.getElementById('fallbackVideo');
+      if (vid) vid.muted = State.muted;
+    } catch(e) {
+      console.warn('[Player] toggleMute error:', e);
+    }
+    $('#btnMute').textContent = State.muted ? '🔊 Unmute' : '🔇 Mute';
+  },
+};
+
+// ── DOM helpers ───────────────────────────────────────────
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
+
+function show(id)  { const el = document.getElementById(id); if(el) el.style.display = 'flex'; }
+function hide(id)  { const el = document.getElementById(id); if(el) el.style.display = 'none'; }
+function showToast(msg, dur=3000) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), dur);
+}
+
+// ── Login ─────────────────────────────────────────────────
+async function doLogin() {
+  const server = $('#serverUrl').value.trim().replace(/\/$/, '');
+  const user   = $('#username').value.trim();
+  const pass   = $('#password').value.trim();
+
+  if (!server || !user || !pass) {
+    showError('Please fill in all fields.'); return;
+  }
+
+  State.server = server; State.user = user; State.pass = pass;
+
+  $('#loginBtn').textContent = '...';
+  $('#loginBtn').disabled = true;
+  $('#errorMsg').style.display = 'none';
+  $('#loadingDots').style.display = 'block';
+
+  try {
+    const data = await XC.login();
+    if (!data.user_info || data.user_info.auth === 0) {
+      throw new Error('Authentication failed. Check credentials.');
+    }
+    State.info = data;
+    await loadApp();
+  } catch(e) {
+    showError(e.message || 'Connection failed. Check server URL.');
+    $('#loginBtn').textContent = 'CONNECT';
+    $('#loginBtn').disabled = false;
+    $('#loadingDots').style.display = 'none';
+  }
+}
+
+function showError(msg) {
+  const el = $('#errorMsg'); el.textContent = msg; el.style.display = 'block';
+}
+
+// ── Load App ──────────────────────────────────────────────
+async function loadApp() {
+  hide('loginScreen');
+  show('appScreen');
+  State.focusZone = 'nav';
+  Player.init();
+
+  const info = State.info.user_info;
+  $('#userInfo').textContent = `${info.username}  •  Exp: ${new Date(info.exp_date*1000).toLocaleDateString()}`;
+
+  // Load live categories & streams in background
+  switchTab('live');
+}
+
+async function switchTab(tab) {
+  State.activeTab = tab;
+  $$('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+
+  $('#categoryList').innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-text">Loading...</div></div>';
+  $('#channelList').innerHTML  = '<div class="empty-state"><div class="empty-icon">📡</div><div class="empty-text">Select a category</div></div>';
+
+  try {
+    let cats, streams;
+    if (tab === 'live') {
+      [cats, streams] = await Promise.all([XC.getLiveCategories(), XC.getLiveStreams()]);
+    } else if (tab === 'vod') {
+      [cats, streams] = await Promise.all([XC.getVodCategories(), XC.getVodStreams()]);
+    } else {
+      [cats, streams] = await Promise.all([XC.getSeriesCategories(), XC.getSeries()]);
+    }
+
+    State.categories[tab] = cats || [];
+    State.streams[tab]    = streams || [];
+    renderCategories(tab);
+  } catch(e) {
+    showToast('Failed to load: ' + e.message);
+    $('#categoryList').innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">Load failed</div></div>';
+  }
+}
+
+function renderCategories(tab) {
+  const cats = State.categories[tab];
+  const streams = State.streams[tab];
+
+  if (!cats.length) {
+    $('#categoryList').innerHTML = '<div class="empty-state"><div class="empty-icon">📂</div><div class="empty-text">No categories</div></div>';
+    return;
+  }
+
+  // "All" item + real cats
+  const all = [{ category_id: null, category_name: 'All Channels', count: streams.length }];
+  const full = all.concat(cats.map(c => ({
+    ...c,
+    count: streams.filter(s => s.category_id == c.category_id).length,
+  })));
+
+  $('#categoryList').innerHTML = full.map((c, i) => `
+    <div class="cat-item${i===0?' active':''}" data-catid="${c.category_id ?? ''}" data-idx="${i}">
+      <span>${c.category_name}</span>
+      <span class="cat-count">${c.count}</span>
+    </div>
+  `).join('');
+
+  $$('.cat-item').forEach(el => {
+    el.addEventListener('click', () => selectCategory(el.dataset.catid || null, el));
+  });
+
+  // Auto-select All
+  selectCategory(null, $('#categoryList .cat-item'));
+}
+
+function selectCategory(catId, el) {
+  State.activeCat = catId;
+  $$('.cat-item').forEach(c => c.classList.remove('active'));
+  if (el) el.classList.add('active');
+
+  const tab = State.activeTab;
+  const streams = catId
+    ? State.streams[tab].filter(s => s.category_id == catId)
+    : State.streams[tab];
+
+  State.filteredStreams = streams;
+  renderChannels(streams);
+}
+
+function renderChannels(streams) {
+  if (!streams.length) {
+    $('#channelList').innerHTML = '<div class="empty-state"><div class="empty-icon">📡</div><div class="empty-text">No items found</div></div>';
+    return;
+  }
+
+  const tab = State.activeTab;
+  $('#channelList').innerHTML = streams.map((s, i) => {
+    const id    = s.stream_id || s.series_id;
+    const name  = s.name || s.title || 'Unknown';
+    const logo  = s.stream_icon || s.cover || '';
+    const epg   = s.epg_channel_id ? '' : '';
+    return `
+      <div class="channel-item" data-idx="${i}" data-id="${id}">
+        <span class="ch-num">${i+1}</span>
+        ${logo
+          ? `<img class="ch-logo" src="${logo}" onerror="this.style.display='none'" loading="lazy" />`
+          : `<div class="ch-logo-placeholder">📺</div>`}
+        <div class="ch-info">
+          <div class="ch-name">${escHtml(name)}</div>
+          ${epg ? `<div class="ch-epg">${escHtml(epg)}</div>` : ''}
+        </div>
+        ${tab==='live' ? '<span class="ch-now">LIVE</span>' : ''}
+      </div>
+    `;
+  }).join('');
+
+  $$('.channel-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const idx = parseInt(el.dataset.idx);
+      playStream(idx);
+    });
+  });
+}
+
+function playStream(idx) {
+  const tab = State.activeTab;
+  const s = State.filteredStreams[idx];
+  if (!s) return;
+
+  State.playingIndex = idx;
+  const id  = s.stream_id || s.series_id;
+  const ext = s.container_extension || (tab === 'live' ? 'm3u8' : 'mp4');
+  const url = XC.streamUrl(tab, id, ext);
+  const name = s.name || s.title || 'Unknown';
+
+  // Highlight in list
+  $$('.channel-item').forEach((el, i) => el.classList.toggle('playing', i === idx));
+
+  // Show player
+  show('playerScreen');
+  $('#spinner').style.display = 'flex';
+  $('#playerChName').textContent = name;
+  $('#playerEpg').textContent = s.epg_channel_id ? `EPG: ${s.epg_channel_id}` : '';
+  State.focusZone = 'player';
+  focusPlayerBtn('playerBackBtn');
+
+  Player.stop();
+  setTimeout(() => Player.play(url), 200);
+  showOverlay();
+}
+
+function closePlayer() {
+  Player.stop();
+  hide('playerScreen');
+  State.focusZone = 'channels';
+  State.playingIndex = -1;
+  if (State.overlayTimer) { clearTimeout(State.overlayTimer); State.overlayTimer = null; }
+}
+
+function showOverlay() {
+  $('#playerOverlay').classList.add('visible');
+  if (State.overlayTimer) clearTimeout(State.overlayTimer);
+  State.overlayTimer = setTimeout(() => {
+    $('#playerOverlay').classList.remove('visible');
+  }, 4000);
+}
+
+function focusPlayerBtn(id) {
+  $$('.ctrl-btn, .player-back-btn').forEach(b => b.classList.remove('focused'));
+  const el = document.getElementById(id);
+  if (el) { el.classList.add('focused'); el.focus(); }
+}
+
+// ── Search ────────────────────────────────────────────────
+$('#searchInput').addEventListener('input', function() {
+  const q = this.value.toLowerCase();
+  const base = State.activeCat
+    ? State.streams[State.activeTab].filter(s => s.category_id == State.activeCat)
+    : State.streams[State.activeTab];
+  const filtered = q ? base.filter(s => (s.name||s.title||'').toLowerCase().includes(q)) : base;
+  State.filteredStreams = filtered;
+  renderChannels(filtered);
+});
+
+// ── Nav tabs ──────────────────────────────────────────────
+$$('.nav-tab').forEach(t => {
+  t.addEventListener('click', () => switchTab(t.dataset.tab));
+});
+
+// ── Player buttons ────────────────────────────────────────
+$('#playerBackBtn').addEventListener('click', closePlayer);
+$('#btnMute').addEventListener('click', () => Player.toggleMute());
+$('#btnPrev').addEventListener('click', () => {
+  if (State.playingIndex > 0) playStream(State.playingIndex - 1);
+});
+$('#btnNext').addEventListener('click', () => {
+  if (State.playingIndex < State.filteredStreams.length - 1) playStream(State.playingIndex + 1);
+});
+
+// Click on player to show overlay
+$('#playerScreen').addEventListener('click', (e) => {
+  if (!e.target.closest('.ctrl-btn')) showOverlay();
+});
+
+// ── Login button ──────────────────────────────────────────
+$('#loginBtn').addEventListener('click', doLogin);
+['serverUrl','username','password'].forEach((id, i, arr) => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      if (i < arr.length - 1) document.getElementById(arr[i+1]).focus();
+      else doLogin();
+    }
+  });
+});
+
+// ════════════════════════════════════════════════════════
+//  TIZEN D-PAD NAVIGATION
+// ════════════════════════════════════════════════════════
+
+const KEY = {
+  UP:38, DOWN:40, LEFT:37, RIGHT:39,
+  ENTER:13, BACK:10009, RETURN:10182,
+  RED:403, GREEN:404, YELLOW:405, BLUE:406,
+  CH_UP:427, CH_DOWN:428,
+};
+
+// Register Tizen remote keys
+try {
+  tizen.tvinputdevice.registerKeyBatch([
+    'ColorF0Red','ColorF1Green','ColorF2Yellow','ColorF3Blue',
+    'ChannelUp','ChannelDown','MediaPlayPause','MediaStop',
+  ]);
+} catch(e) {}
+
+// Login screen focusable elements
+function getLoginEls()   { return [$('#serverUrl'), $('#username'), $('#password'), $('#loginBtn')]; }
+function getNavEls()     { return $$('.nav-tab'); }
+function getCatEls()     { return $$('.cat-item'); }
+function getChannelEls() { return $$('.channel-item'); }
+function getPlayerEls()  { return [$('#playerBackBtn'), $('#btnMute'), $('#btnPrev'), $('#btnNext')]; }
+
+function setFocusInList(els, idx) {
+  els.forEach(e => e.classList.remove('focused'));
+  const el = els[idx];
+  if (el) {
+    el.classList.add('focused');
+    el.scrollIntoView({ block:'nearest', behavior:'smooth' });
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  const k = e.keyCode;
+  const zone = State.focusZone;
+
+  // BACK key — universal
+  if (k === KEY.BACK || k === KEY.RETURN) {
+    if (zone === 'player') { closePlayer(); e.preventDefault(); return; }
+    if (zone === 'channels') { State.focusZone = 'cats'; e.preventDefault(); return; }
+    if (zone === 'cats') { State.focusZone = 'nav'; e.preventDefault(); return; }
+    if (zone === 'nav' || zone === 'login') {
+      try { tizen.application.getCurrentApplication().exit(); } catch(ex) {}
+    }
+    e.preventDefault(); return;
+  }
+
+  // ── PLAYER zone ──────────────────────────────────────
+  if (zone === 'player') {
+    const els = getPlayerEls();
+    let fi = State.focusIdx.player;
+
+    if (k === KEY.UP || k === KEY.DOWN) { showOverlay(); e.preventDefault(); return; }
+    if (k === KEY.LEFT)  { fi = Math.max(0, fi-1); State.focusIdx.player = fi; setFocusInList(els, fi); showOverlay(); e.preventDefault(); return; }
+    if (k === KEY.RIGHT) { fi = Math.min(els.length-1, fi+1); State.focusIdx.player = fi; setFocusInList(els, fi); showOverlay(); e.preventDefault(); return; }
+    if (k === KEY.ENTER) { showOverlay(); els[fi] && els[fi].click(); e.preventDefault(); return; }
+
+    // Channel up/down in player
+    if (k === KEY.CH_UP)   { if (State.playingIndex > 0) playStream(State.playingIndex-1); e.preventDefault(); return; }
+    if (k === KEY.CH_DOWN) { if (State.playingIndex < State.filteredStreams.length-1) playStream(State.playingIndex+1); e.preventDefault(); return; }
+    return;
+  }
+
+  // ── LOGIN zone ───────────────────────────────────────
+  if (zone === 'login') {
+    const els = getLoginEls();
+    let fi = State.focusIdx.login;
+
+    if (k === KEY.DOWN || k === KEY.ENTER && fi < els.length-1) {
+      if (k === KEY.ENTER && fi === els.length-1) { doLogin(); e.preventDefault(); return; }
+      fi = Math.min(els.length-1, fi + (k===KEY.DOWN?1:1));
+      State.focusIdx.login = fi;
+      els[fi].focus();
+      e.preventDefault(); return;
+    }
+    if (k === KEY.UP)    { fi = Math.max(0, fi-1); State.focusIdx.login = fi; els[fi].focus(); e.preventDefault(); return; }
+    return;
+  }
+
+  // ── NAV zone ─────────────────────────────────────────
+  if (zone === 'nav') {
+    const els = getNavEls();
+    let fi = State.focusIdx.nav;
+    setFocusInList(els, fi);
+
+    if (k === KEY.LEFT)  { fi = Math.max(0, fi-1); State.focusIdx.nav = fi; setFocusInList(els, fi); e.preventDefault(); return; }
+    if (k === KEY.RIGHT) { fi = Math.min(els.length-1, fi+1); State.focusIdx.nav = fi; setFocusInList(els, fi); e.preventDefault(); return; }
+    if (k === KEY.ENTER) { els[fi].click(); e.preventDefault(); return; }
+    if (k === KEY.DOWN)  { State.focusZone = 'cats'; State.focusIdx.cats = 0; setFocusInList(getCatEls(), 0); e.preventDefault(); return; }
+    return;
+  }
+
+  // ── CATS zone ────────────────────────────────────────
+  if (zone === 'cats') {
+    const els = getCatEls();
+    let fi = State.focusIdx.cats;
+    setFocusInList(els, fi);
+
+    if (k === KEY.UP)    { fi = Math.max(0, fi-1); State.focusIdx.cats = fi; setFocusInList(els, fi); e.preventDefault(); return; }
+    if (k === KEY.DOWN)  { fi = Math.min(els.length-1, fi+1); State.focusIdx.cats = fi; setFocusInList(els, fi); e.preventDefault(); return; }
+    if (k === KEY.RIGHT) { State.focusZone = 'channels'; State.focusIdx.channels = 0; setFocusInList(getChannelEls(), 0); e.preventDefault(); return; }
+    if (k === KEY.UP && fi === 0) { State.focusZone = 'nav'; setFocusInList(getNavEls(), State.focusIdx.nav); e.preventDefault(); return; }
+    if (k === KEY.ENTER) { els[fi] && els[fi].click(); e.preventDefault(); return; }
+    return;
+  }
+
+  // ── CHANNELS zone ────────────────────────────────────
+  if (zone === 'channels') {
+    const els = getChannelEls();
+    let fi = State.focusIdx.channels;
+    setFocusInList(els, fi);
+
+    if (k === KEY.UP)    { fi = Math.max(0, fi-1); State.focusIdx.channels = fi; setFocusInList(els, fi); e.preventDefault(); return; }
+    if (k === KEY.DOWN)  { fi = Math.min(els.length-1, fi+1); State.focusIdx.channels = fi; setFocusInList(els, fi); e.preventDefault(); return; }
+    if (k === KEY.LEFT)  { State.focusZone = 'cats'; setFocusInList(getCatEls(), State.focusIdx.cats); e.preventDefault(); return; }
+    if (k === KEY.ENTER) { els[fi] && els[fi].click(); e.preventDefault(); return; }
+    return;
+  }
+});
+
+// Init: focus first login field
+window.addEventListener('load', () => {
+  const els = getLoginEls();
+  if (els[0]) els[0].focus();
+  // Ensure login focusIdx.login tracks where we are
+  els.forEach((el, i) => {
+    el.addEventListener('focus', () => { State.focusIdx.login = i; });
+  });
+});
+
+// ── Utility ───────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
